@@ -1,8 +1,8 @@
 # ChatGPT Auto Prompter
 
-> Brainstorm with a supervisor. Let it drive a coding agent through repeated execute → review → improve cycles until the result is accepted.
+> Brainstorm once. Let the supervisor keep driving your coding agent until the result is accepted.
 
-ChatGPT Auto Prompter is an experimental autonomous supervisor loop. A supervisor produces compact coding tasks, a local coding agent executes them, and the supervisor reviews the handoff report and either accepts the result or issues the next task.
+ChatGPT Auto Prompter is an experimental autonomous supervisor loop designed to remove the human copy/paste relay between a planning/review surface and a local coding agent.
 
 ```text
 Supervisor
@@ -16,47 +16,58 @@ planner / reviewer
 Codex / OpenCode
     executor
       |
-      +---- report ----> supervisor
+      +---- compact report ----> supervisor
 ```
 
 ## Goal
 
-Remove the human copy/paste relay from the common workflow:
+Turn this manual workflow:
 
-1. brainstorm and plan;
-2. turn the plan into a coding task;
-3. execute with Codex or another coding agent;
-4. inspect tests, diffs, screenshots, and the executor report;
-5. issue a follow-up task when necessary;
-6. repeat until accepted or safely blocked.
+```text
+ChatGPT -> copy prompt -> Codex -> copy report -> ChatGPT -> copy next prompt -> ...
+```
 
-The relay itself should not require another expensive reasoning model.
+into:
+
+```text
+ChatGPT -> Prompter -> Codex -> Prompter -> ChatGPT -> ... -> DONE
+```
+
+Normal operation should require no human relay after a run starts. Hard blockers such as authentication or human-verification challenges should stop safely rather than being bypassed.
 
 ## Design principles
 
-- **Deterministic core.** No LLM decides state transitions or silently repairs backend invariants.
-- **Replaceable supervisor.** The supervisor transport is an adapter, not part of the core.
-- **Replaceable executor.** Codex is first, but OpenCode and other coding agents can be added later.
-- **Context firewall.** Supervisor sends compact tasks; executor returns compact handoff reports.
-- **Fail closed.** Authentication, CAPTCHA, unknown UI states, corrupted checkpoints, and core bugs stop rather than blind-clicking.
-- **Bounded UI healing.** Optional AI may rediscover moved/renamed browser controls and update UI recipes. It must not rewrite Prompter core/backend code.
-- **Crash resumability.** Persist enough state to continue or diagnose an interrupted autonomous run.
+- **Deterministic core.** No LLM decides whether internal state is valid.
+- **Replaceable supervisor.** ChatGPT is a supervisor adapter, not the state machine.
+- **Replaceable executor.** Codex is first; other coding agents can follow.
+- **Context firewall.** Compact tasks go in; compact handoff reports come back.
+- **No duplicate submission.** Timeout/retry after a committed browser prompt resumes the same operation instead of sending it twice.
+- **Fail closed.** Unknown state, auth/challenge, unverified prompt commit, incomplete response, or corrupted state stops safely.
+- **Bounded UI healing.** Optional AI may rediscover moved browser controls, but only deterministic verification may persist the new data-only recipe.
+- **Protected core.** UI repair never means letting a mechanic model rewrite Prompter backend/source code.
 
 ## Current status
 
-**V0 scaffold.** The deterministic autonomous loop is the first milestone; a production supervisor transport is intentionally not coupled to the core.
+The headless foundation is substantially beyond the original V0 scaffold.
 
-Implemented/scaffolded:
+Implemented:
 
-- multi-cycle supervisor/executor state machine;
-- `NEXT_TASK → execute → review` loop;
-- checkpoint persistence;
-- max-cycle fail-closed behavior;
-- Codex `exec` executor scaffold;
-- generic command-based supervisor adapter;
-- bounded UI-healer interface;
-- zero runtime dependencies;
-- unit tests.
+- multi-cycle `plan -> execute -> review -> next_task/done/blocked` core;
+- strict supervisor/executor protocols and structured error codes;
+- atomic checkpoints;
+- bounded one-shot UI recovery path;
+- `codex exec --json` streaming summary collector;
+- compact extraction of final Codex agent message, changed files, usage and failure evidence;
+- real child-process executor timeout behavior;
+- semantic `ChatGptSupervisor` contract independent of DOM/CDP;
+- durable supervisor operation state to prevent duplicate committed prompts;
+- data-only UI recipe store that rejects unverified AI candidates;
+- current default ChatGPT UI recipes kept outside core code;
+- upstream implementation mining for Oracle, codex-chatgpt-control, codex-chatgpt-web, Stagehand, Browser Harness, and OpenAI Codex.
+
+Latest reconstructed snapshot: **27 passing Node tests**.
+
+The next major milestone is the minimal live ChatGPT CDP driver. See [`docs/CODEX_HANDOFF.md`](docs/CODEX_HANDOFF.md).
 
 ## Development
 
@@ -65,14 +76,14 @@ npm test
 npm run demo
 ```
 
-Node.js 20+ is expected. V0 has no third-party runtime dependency.
+Node.js 20+ is expected. The current foundation intentionally keeps runtime dependencies minimal.
 
-## Protocol
+## Supervisor protocol
 
 A supervisor returns exactly one decision:
 
 ```json
-{ "kind": "next_task", "task": { "id": "task-3", "prompt": "Fix ..." } }
+{ "kind": "next_task", "task": { "id": "task-3", "prompt": "Fix ...", "acceptanceCriteria": ["..."] } }
 ```
 
 ```json
@@ -80,26 +91,31 @@ A supervisor returns exactly one decision:
 ```
 
 ```json
-{ "kind": "blocked", "reason": "Login required." }
+{ "kind": "blocked", "reason": "Login required.", "code": "AUTH_REQUIRED" }
 ```
-
-This keeps browser/UI churn outside the autonomous core.
 
 ## For coding agents
 
-Read [`AGENTS.md`](AGENTS.md) first. It defines the product goal, invariants, architecture boundaries, implementation order, and what **not** to change. The detailed handoff is in [`docs/CODEX_HANDOFF.md`](docs/CODEX_HANDOFF.md).
+Read in this order:
 
-## Policy / service boundaries
+1. [`AGENTS.md`](AGENTS.md)
+2. [`docs/CODEX_HANDOFF.md`](docs/CODEX_HANDOFF.md)
+3. [`docs/UPSTREAM_MINING.md`](docs/UPSTREAM_MINING.md)
 
-This project is an orchestration framework, not a rate-limit or access-control bypass. Integrations must respect the terms of every upstream service. Do not add CAPTCHA bypasses, credential harvesting, hidden-endpoint reverse engineering, account sharing, rate-limit evasion, or behavior intended to circumvent usage limits. Prefer officially supported APIs/integrations where required by the upstream service's terms.
+**Do not scan all upstream repositories first.** `UPSTREAM_MINING.md` already extracts the useful source files, patterns, pitfalls, and implementation order so coding context can be spent on this project instead.
+
+## Service boundaries
+
+This is an orchestration framework, not a rate-limit or access-control bypass. Do not add CAPTCHA bypasses, credential harvesting, hidden-endpoint abuse, account-sharing automation, rate-limit evasion, or other safeguard circumvention.
 
 See [`docs/SERVICE_BOUNDARIES.md`](docs/SERVICE_BOUNDARIES.md).
 
 ## Docs
 
-- [`AGENTS.md`](AGENTS.md) — instructions for Codex and other coding agents
+- [`AGENTS.md`](AGENTS.md) — source-of-truth instructions for coding agents
+- [`docs/CODEX_HANDOFF.md`](docs/CODEX_HANDOFF.md) — concrete current milestone and acceptance criteria
+- [`docs/UPSTREAM_MINING.md`](docs/UPSTREAM_MINING.md) — mined upstream implementation knowledge
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- [`docs/CODEX_HANDOFF.md`](docs/CODEX_HANDOFF.md)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - [`docs/UI_HEALING.md`](docs/UI_HEALING.md)
 - [`docs/REFERENCE_REPOS.md`](docs/REFERENCE_REPOS.md)
