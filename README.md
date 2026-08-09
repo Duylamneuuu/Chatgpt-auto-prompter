@@ -63,11 +63,12 @@ Implemented:
 - durable supervisor operation state to prevent duplicate committed prompts;
 - data-only UI recipe store that rejects unverified AI candidates;
 - current default ChatGPT UI recipes kept outside core code;
+- positive-proof response terminal classifier;
 - upstream implementation mining for Oracle, codex-chatgpt-control, codex-chatgpt-web, Stagehand, Browser Harness, and OpenAI Codex.
 
-Latest reconstructed snapshot: **27 passing Node tests**.
+Latest reconstructed snapshot: **32 passing Node tests**.
 
-The next major milestone is the minimal live ChatGPT CDP driver. See [`docs/CODEX_HANDOFF.md`](docs/CODEX_HANDOFF.md).
+The next major milestone is the minimal live ChatGPT CDP driver. See [`docs/CODEX_HANDOFF.md`](docs/CODEX_HANDOFF.md) and GitHub issue #1.
 
 ## Development
 
