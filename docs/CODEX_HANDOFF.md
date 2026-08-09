@@ -16,6 +16,27 @@ Supervisor -> Prompter -> Codex -> Prompter -> Supervisor -> ... -> DONE
 
 Prompter core is deterministic. ChatGPT/browser mechanics and Codex execution are adapters.
 
+## Product North Star
+
+**After initial setup and starting a run, the normal workflow must be fully automatic until `DONE` or a genuine hard blocker.**
+
+Do not turn reliability/safety work into a manual copy/paste workflow. A solution that requires the user to move prompts or reports between ChatGPT and Codex by hand is not the target product.
+
+Desired behavior:
+
+```text
+setup once
+-> START
+-> ChatGPT/supervisor automatically issues task
+-> Codex automatically executes
+-> Prompter automatically captures compact report/evidence
+-> ChatGPT/supervisor automatically reviews
+-> NEXT_TASK automatically loops
+-> DONE automatically stops
+```
+
+Manual interaction is reserved for unavoidable external blockers such as login, human verification/CAPTCHA, explicit permission prompts, or genuinely ambiguous destructive actions. Those should pause/block safely. Once resolved, resume the autonomous run from durable state where practical.
+
 ## Do not research from zero
 
 Read `docs/UPSTREAM_MINING.md` instead of scanning all upstream repositories. It already mines the useful patterns and exact relevant source files from:
@@ -235,14 +256,14 @@ Do not add yet:
 
 ## After issue #1
 
-1. `prompter doctor` layered diagnostics;
-2. durable CLI `run` / `resume`;
+1. durable automatic `prompter run` / `resume` flow with no manual message relay;
+2. `prompter doctor` layered diagnostics;
 3. bounded failure diagnostics (DOM/AX/screenshot only when useful);
 4. optional OpenAI-compatible mechanic provider (9Router etc.) wired only to recipe recovery;
 5. deterministic verifier/evidence hooks (tests/build/git diff/screenshots);
 6. OpenCode executor adapter;
 7. optional Codex app-server executor;
-8. GUI after the headless loop is dependable.
+8. GUI after the headless zero-touch loop is dependable.
 
 ## Before handing off again
 
@@ -250,4 +271,4 @@ Do not add yet:
 npm test
 ```
 
-Then update this file only with facts actually implemented/tested. If new upstream research was necessary, add the reusable result to `docs/UPSTREAM_MINING.md` so the next agent does not spend context rediscovering it.
+Then confirm that the implementation still advances the **zero-touch automation North Star** rather than introducing a manual relay. Update this file only with facts actually implemented/tested. If new upstream research was necessary, add the reusable result to `docs/UPSTREAM_MINING.md` so the next agent does not spend context rediscovering it.
