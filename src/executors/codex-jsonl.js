@@ -21,6 +21,7 @@ export class CodexJsonlCollector {
     this.changedFiles = new Map();
     this.commandFailures = [];
     this.toolFailures = [];
+    this.itemErrors = [];
     this.streamErrors = [];
   }
 
@@ -57,6 +58,7 @@ export class CodexJsonlCollector {
       changedFiles: [...this.changedFiles.entries()].map(([path, kind]) => ({ path, kind })),
       commandFailures: [...this.commandFailures],
       toolFailures: [...this.toolFailures],
+      itemErrors: [...this.itemErrors],
       streamErrors: [...this.streamErrors],
       rawTail: this.rawTail,
     };
@@ -92,6 +94,7 @@ export class CodexJsonlCollector {
         this.turnFailed = normalizeMessage(event.error?.message ?? event.error ?? "Codex turn failed");
         break;
       case "error":
+        // Top-level `error` is documented as an unrecoverable stream error.
         this.streamErrors.push(normalizeMessage(event.message ?? "Codex stream error"));
         break;
       case "item.completed":
@@ -119,6 +122,7 @@ export class CodexJsonlCollector {
         }
         break;
       case "command_execution":
+        // A command can fail and still be recovered by the agent later in the same turn.
         if (item.status === "failed" || (Number.isInteger(item.exit_code) && item.exit_code !== 0)) {
           this.commandFailures.push({
             command: typeof item.command === "string" ? item.command : "",
@@ -128,6 +132,8 @@ export class CodexJsonlCollector {
         }
         break;
       case "mcp_tool_call":
+        // Same principle: record tool failure as evidence but do not make it a
+        // fatal turn failure unless Codex itself emits turn.failed/top-level error.
         if (item.status === "failed" || item.error) {
           this.toolFailures.push({
             server: typeof item.server === "string" ? item.server : "",
@@ -137,7 +143,8 @@ export class CodexJsonlCollector {
         }
         break;
       case "error":
-        this.streamErrors.push(normalizeMessage(item.message ?? "Codex item error"));
+        // Codex documents error *items* as non-fatal. Keep them as evidence.
+        this.itemErrors.push(normalizeMessage(item.message ?? "Codex item error"));
         break;
       default:
         break;
@@ -161,6 +168,7 @@ export function buildCodexHandoffReport(summary, stderr = "") {
   const parts = [];
   if (summary.turnFailed) parts.push(`Codex turn failed: ${summary.turnFailed}`);
   if (summary.streamErrors.length) parts.push(`Codex errors: ${summary.streamErrors.join(" | ")}`);
+  if (summary.itemErrors.length) parts.push(`Non-fatal Codex item errors: ${summary.itemErrors.join(" | ")}`);
   if (stderr.trim()) parts.push(`stderr:\n${tail(stderr.trim(), 8_000)}`);
   if (!parts.length && summary.rawTail.trim()) parts.push(summary.rawTail.trim());
   return parts.join("\n\n") || "Codex produced no final agent message.";
