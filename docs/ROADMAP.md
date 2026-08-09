@@ -4,42 +4,56 @@
 
 - [x] deterministic state-machine foundation
 - [x] supervisor/executor boundary
-- [x] checkpoint persistence foundation
+- [x] atomic checkpoint persistence foundation
 - [x] max-cycle fail-closed behavior
 - [x] Codex `exec` adapter scaffold
 - [x] generic command supervisor adapter
+- [x] central structured supervisor/executor schemas
 - [x] core unit tests
-- [ ] explicit durable state-transition model
+- [x] structured error taxonomy
+- [ ] explicit durable transition/recovery model for full process resume
 - [ ] cancellation support
-- [ ] structured executor result schema
 - [ ] disposable-project integration test
 
-## V1 — reliable executor + supervisor transport
+## V1 — reliable executor + semantic supervisor
 
-- [ ] structured Codex JSON event parsing
-- [ ] distinguish task failure/process failure/timeout
-- [ ] compact handoff report extraction
+- [x] structured Codex JSON event parsing
+- [x] distinguish process failure/timeout/fatal turn events from recoverable item failures
+- [x] compact handoff report extraction
+- [x] bounded executor raw-log retention
+- [x] supervisor adapter with strict structured output
+- [x] durable supervisor operation ids/state
+- [x] duplicate-submit prevention contract after a committed supervisor prompt
 - [ ] verifier hooks: git diff/stat, tests, build, screenshots
-- [ ] supervisor adapter with strict structured output
-- [ ] end-to-end autonomous run
+- [ ] end-to-end autonomous run with a real supervisor transport
 
-## V1.5 — browser supervisor experiments
+## V1.5 — minimal browser supervisor transport
 
-Only where permitted by the upstream service's current terms:
+Tracked by GitHub issue #1.
 
-- [ ] attach to user-controlled browser through a replaceable adapter
-- [ ] identify/reuse a specific thread safely
-- [ ] deterministic interaction recipes
-- [ ] structured UI blocker codes
-- [ ] login/CAPTCHA/access-control -> BLOCKED
+- [ ] attach to a user-controlled browser through CDP
+- [ ] identify/reuse an explicitly intended conversation safely
+- [x] deterministic data-only interaction recipe format
+- [x] current bundled ChatGPT recipe fallback set
+- [x] structured browser/UI blocker codes
+- [x] semantic browser-driver contract (`prepare/submit/waitForResponse`)
+- [x] positive-proof response terminal classifier
+- [x] login/human-verification/access-control are defined as non-healable blockers
+- [ ] live composer interaction + insertion postcondition
+- [ ] positive prompt-commit proof
+- [ ] live assistant-turn observation feeding response gate
+- [ ] same-conversation smoke test
 
 ## V2 — bounded UI drift recovery
 
-- [ ] cached recipes first
-- [ ] semantic/DOM mechanic only on recipe failure
-- [ ] candidate-recipe validation
-- [ ] learned per-domain recipes
-- [ ] optional OpenAI-compatible mechanic provider
+- [x] deterministic cached/runtime recipes first
+- [x] candidate recipe schema validation
+- [x] reject persistence of unverified AI candidates
+- [x] previous runtime recipe snapshot for rollback/debugging
+- [ ] bounded DOM/AX diagnostic collector
+- [ ] semantic/DOM mechanic invoked only on recipe failure
+- [ ] deterministic live verification of mechanic candidate
+- [ ] optional OpenAI-compatible mechanic provider (for example a local router)
 - [ ] browser console/network diagnostics
 - [ ] optional vision fallback
 
