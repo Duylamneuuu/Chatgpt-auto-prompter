@@ -107,15 +107,22 @@ export class CodexExecExecutor {
         }
 
         const summary = collector.finish();
-        const turnFailed = Boolean(summary.turnFailed || summary.streamErrors.length);
-        const failed = timedOut || code !== 0 || turnFailed;
-        const report = buildCodexHandoffReport(summary, stderrTail);
+        const fatalCodexEvent = Boolean(summary.turnFailed || summary.streamErrors.length);
+        const incompleteEventStream =
+          this.options.requireTurnCompleted !== false &&
+          !summary.turnCompleted &&
+          !summary.turnFailed;
+        const failed = timedOut || code !== 0 || fatalCodexEvent || incompleteEventStream;
+        let report = buildCodexHandoffReport(summary, stderrTail);
+        if (incompleteEventStream) {
+          report = `Codex JSONL stream ended without turn.completed; treating the result as incomplete.\n\n${report}`;
+        }
 
         finish({
           status: failed ? "failed" : "completed",
           errorCode: timedOut
             ? ErrorCode.EXECUTOR_TIMEOUT
-            : code !== 0 || turnFailed
+            : code !== 0 || fatalCodexEvent || incompleteEventStream
               ? ErrorCode.EXECUTOR_PROCESS_FAILED
               : undefined,
           report,
@@ -129,6 +136,7 @@ export class CodexExecExecutor {
             changedFiles: summary.changedFiles,
             commandFailures: summary.commandFailures,
             toolFailures: summary.toolFailures,
+            itemErrors: summary.itemErrors,
             streamErrors: summary.streamErrors,
             invalidJsonlLines: summary.invalidLineCount,
             eventCount: summary.eventCount,
@@ -167,7 +175,7 @@ function terminateChildTree(child) {
 
   child.kill("SIGTERM");
   const forceTimer = setTimeout(() => {
-    if (!child.killed) child.kill("SIGKILL");
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
   }, 2_000);
   forceTimer.unref?.();
 }
