@@ -21,7 +21,28 @@ supervisor reviews
    └─ BLOCKED
 ```
 
-Normal operation should be zero-touch after start. Hard blockers such as authentication, human verification, permissions, uncertain destructive actions, or unverified browser state must fail closed.
+## NORTH STAR — DO NOT DILUTE THIS
+
+**The product must be fully automatic after initial setup/start.** The user should not have to copy prompts, paste reports, click "continue", shuttle messages between ChatGPT and Codex, or manually trigger each loop iteration.
+
+The intended steady-state experience is:
+
+```text
+one-time setup
+-> user starts a run
+-> supervisor sends task automatically
+-> executor works automatically
+-> Prompter returns evidence/report automatically
+-> supervisor reviews automatically
+-> NEXT_TASK loops automatically
+-> DONE stops automatically
+```
+
+A design that requires the user to manually copy/paste between supervisor and executor is **not an acceptable final implementation**; it defeats the purpose of the project. Manual interaction is permitted only for unavoidable external hard blockers such as authentication, human verification/CAPTCHA, explicit permissions, or genuinely ambiguous destructive actions. Once such a blocker is resolved, the run should be able to resume automation rather than fall back to a permanent manual workflow.
+
+Safety and reliability work must preserve this automation goal. Do not "solve" browser instability by turning the product into a manual relay.
+
+Normal operation should therefore be zero-touch after start.
 
 ## Read order
 
@@ -58,16 +79,18 @@ At this handoff snapshot the reconstructed repo passes **32 Node tests**. Trust 
 
 ## Non-negotiable boundaries
 
-1. **Core is deterministic.** Never use an LLM to repair or validate internal core invariants.
-2. **Supervisor and executor stay behind adapters.**
-3. **DOM/CDP details never leak into core.**
-4. **UI healing is narrow.** AI may propose a selector/AX recipe; deterministic code must verify it before persistence.
-5. **Mechanic AI does not rewrite Prompter source/backend as recovery.**
-6. **Fail closed.** Unknown state is not success.
-7. **No duplicate browser submissions.** Timeout/retry is never permission to blindly resend a committed prompt.
-8. **Positive postconditions beat sleeps.** A click is not proof; stable text alone is not proof of completion.
-9. **Keep context bounded.** Do not forward unlimited browser/terminal logs to the supervisor.
-10. **Do not bypass safeguards.** No CAPTCHA bypass, credential harvesting, hidden-endpoint abuse, rate-limit evasion, or access-control circumvention.
+1. **Automation is the product.** After setup/start, supervisor ↔ Prompter ↔ executor must run without human message relaying.
+2. **Core is deterministic.** Never use an LLM to repair or validate internal core invariants.
+3. **Supervisor and executor stay behind adapters.**
+4. **DOM/CDP details never leak into core.**
+5. **UI healing is narrow.** AI may propose a selector/AX recipe; deterministic code must verify it before persistence.
+6. **Mechanic AI does not rewrite Prompter source/backend as recovery.**
+7. **Fail closed.** Unknown state is not success.
+8. **No duplicate browser submissions.** Timeout/retry is never permission to blindly resend a committed prompt.
+9. **Positive postconditions beat sleeps.** A click is not proof; stable text alone is not proof of completion.
+10. **Keep context bounded.** Do not forward unlimited browser/terminal logs to the supervisor.
+11. **Do not bypass safeguards.** No CAPTCHA bypass, credential harvesting, hidden-endpoint abuse, rate-limit evasion, or access-control circumvention.
+12. **Hard blockers pause; they do not redefine the product as manual.** After the blocker is resolved, automation should resume from durable state where possible.
 
 ## Immediate next milestone
 
@@ -147,24 +170,25 @@ Only actual recipe drift should be `UI_RECIPE_MISS`.
 In order:
 
 1. live same-conversation smoke test;
-2. `prompter doctor` diagnostics;
-3. durable `run` / `resume` CLI;
+2. durable automatic `prompter run` / `resume` flow;
+3. `prompter doctor` diagnostics;
 4. bounded DOM/AX/screenshot diagnostics;
 5. optional mechanic endpoint + verified recipe update path;
 6. deterministic verifier/evidence hooks;
 7. optional OpenCode executor;
 8. optional Codex app-server executor;
-9. GUI only after headless flow is dependable.
+9. GUI only after headless zero-touch flow is dependable.
 
-Do not add model pickers, ChatGPT Work, Deep Research, attachment pipelines, generic multi-agent frameworks, or vision computer-use fallback before the simple loop works reliably.
+Do not add model pickers, ChatGPT Work, Deep Research, attachment pipelines, generic multi-agent frameworks, or vision computer-use fallback before the simple automatic loop works reliably.
 
 ## Before finishing any coding task
 
 ```text
 1. npm test
 2. add tests for new invariants
-3. update docs/CODEX_HANDOFF.md if the next milestone changed
-4. only update docs/UPSTREAM_MINING.md when new upstream research was genuinely required
+3. confirm the change moves toward zero-touch automation rather than manual relay
+4. update docs/CODEX_HANDOFF.md if the next milestone changed
+5. only update docs/UPSTREAM_MINING.md when new upstream research was genuinely required
 ```
 
-When unsure, implement the smallest testable slice while preserving the boundaries above.
+When unsure, implement the smallest testable slice while preserving the boundaries above and the zero-touch automation North Star.
