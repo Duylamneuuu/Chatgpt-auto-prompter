@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { ErrorCode, PrompterError } from "../core/errors.js";
+import { validateSupervisorDecision } from "../core/protocol.js";
 
 /**
  * Adapter boundary for a supported API, local command, or experimental browser bridge.
@@ -15,7 +17,7 @@ export class CommandSupervisor {
         cwd: this.options.cwd,
         shell: false,
         windowsHide: true,
-        env: process.env,
+        env: { ...process.env, ...(this.options.env ?? {}) },
       });
 
       let stdout = "";
@@ -35,7 +37,12 @@ export class CommandSupervisor {
       const timer = this.options.timeoutMs
         ? setTimeout(() => {
             child.kill();
-            finishReject(new Error(`Supervisor command timed out after ${this.options.timeoutMs}ms`));
+            finishReject(
+              new PrompterError(
+                ErrorCode.SERVICE_UNAVAILABLE,
+                `Supervisor command timed out after ${this.options.timeoutMs}ms`,
+              ),
+            );
           }, this.options.timeoutMs)
         : undefined;
 
@@ -43,18 +50,43 @@ export class CommandSupervisor {
       child.stderr.setEncoding("utf8");
       child.stdout.on("data", (chunk) => (stdout += chunk));
       child.stderr.on("data", (chunk) => (stderr += chunk));
-      child.on("error", finishReject);
+      child.on("error", (error) => {
+        if (timer) clearTimeout(timer);
+        finishReject(
+          new PrompterError(
+            ErrorCode.SERVICE_UNAVAILABLE,
+            `Failed to start supervisor command: ${error.message}`,
+            { cause: error },
+          ),
+        );
+      });
       child.on("close", (code) => {
         if (timer) clearTimeout(timer);
         if (settled) return;
         if (code !== 0) {
-          finishReject(new Error(`Supervisor command exited ${code}: ${stderr.trim()}`));
+          finishReject(
+            new PrompterError(
+              ErrorCode.SERVICE_UNAVAILABLE,
+              `Supervisor command exited ${code}: ${stderr.trim()}`,
+              { details: { exitCode: code } },
+            ),
+          );
           return;
         }
         try {
-          finishResolve(validateDecision(JSON.parse(stdout)));
+          finishResolve(validateSupervisorDecision(JSON.parse(stdout)));
         } catch (error) {
-          finishReject(new Error(`Invalid supervisor JSON: ${error.message}\nRaw output:\n${stdout}`));
+          if (error instanceof PrompterError) {
+            finishReject(error);
+            return;
+          }
+          finishReject(
+            new PrompterError(
+              ErrorCode.INVALID_SUPERVISOR_DECISION,
+              `Invalid supervisor JSON: ${error.message}`,
+              { cause: error, details: { rawOutput: stdout } },
+            ),
+          );
         }
       });
 
@@ -63,14 +95,5 @@ export class CommandSupervisor {
   }
 }
 
-export function validateDecision(value) {
-  if (!value || typeof value !== "object") throw new Error("decision must be an object");
-  if (value.kind === "done" && typeof value.summary === "string") return value;
-  if (value.kind === "blocked" && typeof value.reason === "string") return value;
-  if (value.kind === "next_task") {
-    if (value.task && typeof value.task.id === "string" && typeof value.task.prompt === "string") {
-      return value;
-    }
-  }
-  throw new Error(`unsupported decision: ${JSON.stringify(value)}`);
-}
+// Backward-compatible export for the early V0 API.
+export const validateDecision = validateSupervisorDecision;
