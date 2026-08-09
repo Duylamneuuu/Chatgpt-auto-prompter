@@ -4,115 +4,126 @@
 
 Build **ChatGPT Auto Prompter**: a local autonomous supervisor/executor loop that removes the human copy/paste relay between a planning/review surface and a coding agent.
 
-Target experience:
-
 ```text
-user brainstorms / provides a brief
-            |
-            v
-supervisor plans and issues one compact task
-            |
-            v
-local coding agent executes in the target repo
-            |
-            v
-Prompter collects a compact report + optional verification artifacts
-            |
-            v
+user brief / brainstorm
+        ↓
+supervisor plans one task
+        ↓
+Prompter deterministic core
+        ↓
+Codex executes
+        ↓
+compact report
+        ↓
 supervisor reviews
-      |             |
-      |             +--> NEXT_TASK --> execute again
-      +-----------------> DONE
+   ├─ NEXT_TASK → repeat
+   ├─ DONE
+   └─ BLOCKED
 ```
 
-Normal operation should be zero-touch after the run starts. Human intervention is acceptable for hard blockers such as authentication, human-verification challenges, permissions, or ambiguous destructive actions.
+Normal operation should be zero-touch after start. Hard blockers such as authentication, human verification, permissions, uncertain destructive actions, or unverified browser state must fail closed.
 
-## Read order for coding agents
+## Read order
 
-Do **not** start by scanning upstream repositories.
+Do **not** scan upstream repositories first.
 
-Read, in order:
+1. `AGENTS.md`
+2. `docs/CODEX_HANDOFF.md`
+3. `docs/UPSTREAM_MINING.md`
+4. relevant source/tests
+5. GitHub issue #1 for the current V1 browser milestone
 
-1. this file;
-2. `docs/CODEX_HANDOFF.md`;
-3. `docs/UPSTREAM_MINING.md`;
-4. the code/tests relevant to the current milestone.
-
-`docs/UPSTREAM_MINING.md` already mines the important implementation patterns and exact source files from Oracle, codex-chatgpt-control, codex-chatgpt-web, Stagehand, Browser Harness, and OpenAI Codex. Only open upstream source when that digest explicitly leaves a concrete gap.
+`docs/UPSTREAM_MINING.md` already extracts the useful code patterns and exact files from Oracle, codex-chatgpt-control, codex-chatgpt-web, Stagehand, Browser Harness, and OpenAI Codex. Read upstream only for a concrete unresolved gap.
 
 ## Current implementation snapshot — 2026-08-09
 
-Already implemented:
+Implemented:
 
 - deterministic multi-cycle supervisor/executor loop;
-- central supervisor/executor protocol validation;
+- strict supervisor/executor protocol validation;
 - structured error taxonomy;
-- atomic checkpoint writes;
-- max-cycle safe block;
-- failure persistence/events;
-- UI healer limited to `UI_RECIPE_MISS` and exactly one retry;
-- bounded Codex `exec --json` JSONL collector;
-- final Codex agent-message extraction + compact execution metadata;
-- semantic `ChatGptSupervisor` contract independent of DOM/CDP;
-- durable supervisor operation store so a committed browser prompt is not submitted twice after retry/restart;
-- data-only UI recipe store that refuses unverified AI-generated updates;
-- default ChatGPT selector recipes kept outside the core.
+- atomic checkpoints;
+- failure persistence/events and max-cycle safe block;
+- UI healer limited to `UI_RECIPE_MISS` and one retry;
+- bounded `codex exec --json` event collector;
+- final Codex message + compact evidence extraction;
+- real child-process timeout behavior;
+- semantic `ChatGptSupervisor` independent of DOM/CDP;
+- durable operation state preventing duplicate committed prompts after retry/restart;
+- data-only UI recipe store that refuses unverified AI candidates;
+- default ChatGPT UI recipes outside core code;
+- pure positive-proof response terminal classifier.
 
-The reconstructed committed snapshot has been exercised with **24 passing Node tests**. Always run `npm test` yourself before and after changes.
+At this handoff snapshot the reconstructed repo passes **32 Node tests**. Trust `npm test` over this number if the repo has changed.
 
-## Non-negotiable architecture boundaries
+## Non-negotiable boundaries
 
-1. **The core is deterministic.** Do not put an LLM inside the state machine to decide whether internal invariants are valid.
-2. **Supervisor != executor.** Keep both behind interfaces/adapters.
-3. **UI healing is narrow.** AI may repair browser interaction recipes/selectors when the UI moves or changes. It must not rewrite Prompter core/backend code as a recovery strategy.
-4. **Fail closed.** Unknown state, auth failure, human-verification challenge, corrupted checkpoint, or unsafe ambiguity must stop with a structured blocker.
-5. **Do not automate around service safeguards.** No CAPTCHA bypass, rate-limit evasion, credential harvesting, hidden endpoint abuse, or access-control circumvention.
-6. **Prefer observable postconditions over sleeps.** Browser actions must prove the intended state change happened.
-7. **Do not couple core logic to ChatGPT DOM details.** Those belong in the ChatGPT browser driver/recipes.
-8. **Keep context compact.** Supervisor emits tasks; executor emits handoff reports. Do not blindly shuttle full terminal logs or browser history every cycle.
-9. **No duplicate browser submissions.** A timeout or UI-heal retry is never permission to blindly send the same prompt again.
-10. **Runtime-learned UI state is data.** Mechanic AI proposes a bounded recipe candidate; deterministic code verifies it before persistence.
+1. **Core is deterministic.** Never use an LLM to repair or validate internal core invariants.
+2. **Supervisor and executor stay behind adapters.**
+3. **DOM/CDP details never leak into core.**
+4. **UI healing is narrow.** AI may propose a selector/AX recipe; deterministic code must verify it before persistence.
+5. **Mechanic AI does not rewrite Prompter source/backend as recovery.**
+6. **Fail closed.** Unknown state is not success.
+7. **No duplicate browser submissions.** Timeout/retry is never permission to blindly resend a committed prompt.
+8. **Positive postconditions beat sleeps.** A click is not proof; stable text alone is not proof of completion.
+9. **Keep context bounded.** Do not forward unlimited browser/terminal logs to the supervisor.
+10. **Do not bypass safeguards.** No CAPTCHA bypass, credential harvesting, hidden-endpoint abuse, rate-limit evasion, or access-control circumvention.
 
 ## Immediate next milestone
 
-The next major task is **a minimal live ChatGPT CDP driver** behind the already-existing `ChatGptSupervisor` semantic contract.
+Implement the **minimal live ChatGPT CDP driver** required by GitHub issue #1 and consumed by:
 
-Do not redesign the core first.
+`src/supervisors/chatgpt/chatgpt-supervisor.js`
 
-Implement only enough browser functionality to satisfy:
+Existing semantic calls:
 
-```text
-prepare()
-  -> attach to a user-controlled Chrome session
-  -> identify/verify the intended ChatGPT conversation
-
-submit()
-  -> locate a visible composer from recipes
-  -> insert prompt reliably
-  -> submit
-  -> positively prove a new user turn was committed
-  -> return { committed: true, ...receipt }
-
-waitForResponse()
-  -> watch the corresponding assistant turn
-  -> positively prove completion
-  -> return { complete: true, text, responseId }
+```js
+await driver.prepare({ operationId, input })
+await driver.submit({ operationId, input, prompt, thread })
+await driver.waitForResponse({ operationId, input, receipt, thread })
 ```
 
-### Browser completion rules
+Do not redesign the core before implementing this driver unless a failing test demonstrates a real architectural flaw.
 
-Do **not** use `text stable for N seconds` as the sole completion condition. Follow `docs/UPSTREAM_MINING.md`:
+### `prepare()`
 
-- observer + polling/watchdog paths are desirable;
-- scope to the expected turn/conversation;
-- content rewrites reset stability, even if length is unchanged;
-- visible/strong working signals veto completion;
-- require positive terminal evidence;
-- if completion cannot be proved, fail closed with `RESPONSE_COMPLETION_UNVERIFIED` or `RESPONSE_TIMEOUT`.
+- attach to a user-controlled local Chrome/Chromium CDP endpoint;
+- identify an explicitly intended `chatgpt.com` tab/conversation;
+- verify the page/composer is usable;
+- return bounded conversation identity;
+- map auth/challenge/wrong-page conditions to structured errors.
 
-### Browser error mapping
+### `submit()`
 
-Map known conditions into existing codes rather than random strings:
+- load deterministic recipes first;
+- locate visible composer;
+- focus/insert text so the framework editor registers it;
+- verify the inserted text;
+- submit;
+- positively prove a new user turn was committed;
+- return `{ committed: true, ...receipt }` only after proof.
+
+If the click may have submitted but commit cannot be proved, use `PROMPT_COMMIT_UNVERIFIED`; do not retry submission blindly.
+
+### `waitForResponse()`
+
+Use `src/browser/response-gate.js` rather than inventing a new completion heuristic.
+
+The driver should feed it browser samples containing:
+
+```text
+contentKey
+textLength
+stopVisible
+terminalActionVisible
+strongActivityVisible
+```
+
+Scope samples to the expected conversation/assistant turn. Observer + polling/watchdog paths are desirable. Return a response only after positive terminal proof.
+
+## Browser error mapping
+
+Prefer existing codes:
 
 ```text
 BROWSER_UNAVAILABLE
@@ -126,75 +137,34 @@ PROMPT_COMMIT_UNVERIFIED
 RESPONSE_TIMEOUT
 RESPONSE_COMPLETION_UNVERIFIED
 UI_RECIPE_MISS
+UI_HEAL_FAILED
 ```
 
-Only `UI_RECIPE_MISS` is eligible for the UI healer.
+Only actual recipe drift should be `UI_RECIPE_MISS`.
 
-## After the minimal CDP driver
+## After issue #1
 
-Work in this order:
+In order:
 
-1. live smoke test against an explicitly chosen ChatGPT conversation;
+1. live same-conversation smoke test;
 2. `prompter doctor` diagnostics;
-3. durable `prompter run` / `prompter resume` without duplicate submission;
-4. bounded UI diagnostics (DOM/AX/screenshot only when needed);
-5. mechanic provider connected to the data-only recipe store;
-6. optional verifier hooks: tests/build/git diff/screenshots;
-7. only then consider a Codex app-server executor, OpenCode executor, richer UI, model selection, attachments, or vision fallback.
+3. durable `run` / `resume` CLI;
+4. bounded DOM/AX/screenshot diagnostics;
+5. optional mechanic endpoint + verified recipe update path;
+6. deterministic verifier/evidence hooks;
+7. optional OpenCode executor;
+8. optional Codex app-server executor;
+9. GUI only after headless flow is dependable.
 
-## Existing interfaces / intent
+Do not add model pickers, ChatGPT Work, Deep Research, attachment pipelines, generic multi-agent frameworks, or vision computer-use fallback before the simple loop works reliably.
 
-Supervisor decisions:
+## Before finishing any coding task
 
-```js
-{ kind: "next_task", task: { id, prompt, acceptanceCriteria? } }
-{ kind: "done", summary }
-{ kind: "blocked", reason, code? }
+```text
+1. npm test
+2. add tests for new invariants
+3. update docs/CODEX_HANDOFF.md if the next milestone changed
+4. only update docs/UPSTREAM_MINING.md when new upstream research was genuinely required
 ```
 
-Executor result minimum:
-
-```js
-{
-  status: "completed" | "failed" | "blocked",
-  report: "compact handoff",
-  exitCode: 0 | null
-}
-```
-
-ChatGPT semantic driver contract is consumed by `src/supervisors/chatgpt/chatgpt-supervisor.js`:
-
-```js
-await driver.prepare({ operationId, input })
-await driver.submit({ operationId, input, prompt, thread })
-await driver.waitForResponse({ operationId, input, receipt, thread })
-```
-
-A committed operation is stored before waiting. Respect this invariant.
-
-## Verification philosophy
-
-The supervisor should not accept success solely because the executor says "done". Add optional evidence hooks later:
-
-- command/test results;
-- build result;
-- git diff summary;
-- screenshots for UI work;
-- changed-file list;
-- structured verifier output.
-
-Keep evidence bounded and summarized before sending it back to the supervisor.
-
-## Quality bar
-
-- Node.js 20+ initially.
-- Windows is a first-class target.
-- Minimize dependencies until a dependency clearly removes more complexity than it adds.
-- Tests are required for state transitions and retry/idempotency behavior.
-- Avoid giant framework abstractions before the end-to-end loop works.
-- Do not mark roadmap items complete without a real test.
-- Preserve zero-touch normal operation, but fail closed on hard blockers.
-
-## When unsure
-
-Preserve the boundaries above and implement the smallest testable end-to-end slice. Do not redesign the project into a generic multi-agent framework. Do not reread all upstream repos: use `docs/UPSTREAM_MINING.md` first.
+When unsure, implement the smallest testable slice while preserving the boundaries above.
